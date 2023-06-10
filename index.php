@@ -14,6 +14,6 @@ $dotenv = Dotenv\Dotenv::createImmutable(__DIR__)->load();
 
 $router = new Router();
 
-
+$router->get('/api/quizzes', 'App\Controllers\QuizController@index');
 
 $router->run();
