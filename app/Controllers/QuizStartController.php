@@ -39,7 +39,7 @@ class QuizStartController
                 ->select('EXISTS (' . $subQuery->getSQL() . ')')
                 ->setParameter('id', $quizId)
                 ->fetchOne();
-        } catch (Exception $e) {
+        } catch (Exception) {
             throw new InternalException('Failed to fetch query');
         }
 
@@ -56,7 +56,7 @@ class QuizStartController
                 ->where('qz.id = :id')
                 ->setParameter('id', $quizId)
                 ->fetchAllAssociative();
-        } catch (Exception $e) {
+        } catch (Exception) {
             throw new InternalException('Failed to fetch query');
         }
 
