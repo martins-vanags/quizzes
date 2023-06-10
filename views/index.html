@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quiz Page</title>
+    <style>
+        #progressBar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+        }
+
+        #progress {
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 10px;
+            width: 0;
+        }
+    </style>
+</head>
+<body>
+<div id="formContainer">
+    <form id="quizForm">
+        <label for="username">Username:</label>
+        <input type="text" id="username" required>
+
+        <label for="quizSelect">Select Quiz:</label>
+        <select id="quizSelect" required></select>
+
+        <button type="submit">Start</button>
+    </form>
+</div>
+
+<div id="quizContainer" style="display: none;">
+    <h1>Welcome <span id="usernameDisplay"></span>!</h1>
+    <h2>Quiz:</h2>
+    <div id="questionContainer">
+        <h3 id="questionText"></h3>
+        <form id="optionsForm">
+            <div id="options"></div>
+            <button type="submit" id="submitButton" disabled>Next</button>
+        </form>
+        <div id="progressBar">
+            <div id="progress"></div>
+        </div>
+    </div>
+</div>
+
+<div id="resultContainer" style="display: none;">
+
+</div>
+
+<script>
+    const formContainer = document.getElementById('formContainer');
+    const quizContainer = document.getElementById('quizContainer');
+    const usernameInput = document.getElementById('username');
+    const quizSelect = document.getElementById('quizSelect');
+    const usernameDisplay = document.getElementById('usernameDisplay');
+    const questionText = document.getElementById('questionText');
+    const optionsForm = document.getElementById('optionsForm');
+    const options = document.getElementById('options');
+    const submitButton = document.getElementById('submitButton');
+    const resultContainer = document.getElementById('resultContainer');
+    const progress = document.getElementById('progress');
+
+    let quizData = null;
+    let currentQuestionIndex = 0;
+    let username = null;
+    let quizId = null;
+
+    // Fetch quizzes from the API
+    fetch('/api/quizzes')
+        .then(response => response.json())
+        .then(data => {
+            const quizzes = data.data.quizzes;
+            quizzes.forEach(quiz => {
+                const option = document.createElement('option');
+                option.value = quiz.id;
+                option.text = quiz.name;
+                quizSelect.appendChild(option);
+            });
+        })
+        .catch(error => console.log(error.message));
+
+    // Handle form submission
+    document.getElementById('quizForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        quizId = quizSelect.value;
+        username = usernameInput.value;
+
+        if (username && quizId) {
+            // Display the quiz container and hide the form container
+            formContainer.style.display = 'none';
+            quizContainer.style.display = 'block';
+
+            // Display the username
+            usernameDisplay.textContent = username;
+
+            // Make a POST request to start the quiz and retrieve the questions & answer options
+            fetch(`/api/quiz/${quizId}/start`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({username: username})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    quizData = data.data;
+                    showNextQuestion();
+                })
+                .catch(error => console.error('Error:', error)); // TODO: Transform it to show alert error msg
+        }
+    });
+
+    function updateProgressBar() {
+        const totalQuestions = Object.keys(quizData).length;
+        const progressPercentage = (currentQuestionIndex / totalQuestions) * 100;
+        progress.style.width = `${progressPercentage}%`;
+    }
+
+    // Show the next question
+    function showNextQuestion() {
+        if (currentQuestionIndex >= Object.keys(quizData).length) {
+            // All questions answered
+            fetch(`/api/quiz/${quizId}/complete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username: username
+                })
+            })
+                .catch(error => console.log(error));
+
+            showResult();
+            return;
+        }
+
+        const questionKey = Object.keys(quizData)[currentQuestionIndex];
+        const questionOptions = quizData[questionKey];
+
+        questionText.textContent = questionKey;
+        options.innerHTML = '';
+
+        questionOptions.forEach(option => {
+            const radioInput = document.createElement('input');
+            radioInput.type = 'radio';
+            radioInput.name = 'option';
+            radioInput.value = option.option_id;
+
+            const label = document.createElement('label');
+            label.textContent = option.option_text;
+
+            const optionContainer = document.createElement('div');
+            optionContainer.appendChild(radioInput);
+            optionContainer.appendChild(label);
+
+            options.appendChild(optionContainer);
+        });
+
+        currentQuestionIndex++;
+        submitButton.disabled = true;
+        updateProgressBar();
+    }
+
+    // Handle answer options form submission
+    optionsForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        const selectedOption = optionsForm.querySelector('input[name="option"]:checked');
+
+        if (selectedOption) {
+            fetch(`/api/quiz/${quizId}/answers`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    question_id: quizData[questionText.textContent][0].question_id,
+                    option_id: selectedOption.value,
+                    username: username
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Answers submitted:', data);
+                    showNextQuestion();
+                })
+                .catch(error => console.log(error));
+        }
+    });
+
+    // Enable submit button only when one radio box is checked
+    optionsForm.addEventListener('change', function () {
+        const selectedOption = optionsForm.querySelector('input[name="option"]:checked');
+        submitButton.disabled = !selectedOption;
+    });
+
+    // Show the final result
+    function showResult() {
+        quizContainer.style.display = 'none';
+        resultContainer.style.display = 'block';
+
+        fetch(`/api/user/quiz/${quizId}/answers?` + new URLSearchParams({
+            username: username,
+        }))
+            .then(response => response.json())
+            .then(data => {
+                const answers = data.data.answers[0];
+                const correctAnswers = answers.correct_answers;
+                const totalQuestions = answers.total_questions;
+
+                const resultText = document.createElement('p');
+                resultText.textContent = `${username} answered correctly to ${correctAnswers} out of ${totalQuestions} questions.`;
+
+                resultContainer.appendChild(resultText);
+            })
+            .catch(error => console.error('Error:', error));
+    }
+</script>
+</body>
+</html>
