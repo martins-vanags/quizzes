@@ -16,5 +16,6 @@ $router = new Router();
 
 $router->get('/api/quizzes', 'App\Controllers\QuizController@index');
 $router->post('/api/quiz/{id}/start', 'App\Controllers\QuizStartController@store');
+$router->post('/api/quiz/{id}/answers', 'App\Controllers\UserQuizAnswerController@store');
 
 $router->run();
